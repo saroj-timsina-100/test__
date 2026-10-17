@@ -1,0 +1,9 @@
+{
+  "name": "sampada-portfolio",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "npx serve . -l 3000"
+  }
+}
