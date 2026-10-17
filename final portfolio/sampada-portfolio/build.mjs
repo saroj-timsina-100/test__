@@ -9,8 +9,9 @@ const abs = (p) => (site.siteUrl ? site.siteUrl.replace(/\/$/, '') + p : p);
 const mail = `mailto:${site.email}`;
 // vercel.json caches /assets/ for a year, so CSS/JS links carry a content hash to load fresh files after each change.
 const ver = (file) => createHash('md5').update(readFileSync(file)).digest('hex').slice(0, 8);
-const cssHref = `/assets/site.css?v=${ver('assets/site.css')}`;
-const jsHref = `/assets/site.js?v=${ver('assets/site.js')}`;
+const cssHref = (root) => `${root}assets/site.css?v=${ver('assets/site.css')}`;
+const jsHref = (root) => `${root}assets/site.js?v=${ver('assets/site.js')}`;
+const localAsset = (path, root) => path.startsWith('/') ? `${root}${path.slice(1)}` : path;
 
 const fonts = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">`;
@@ -24,6 +25,7 @@ d.setAttribute('data-theme',t)})()`;
 function head({ title, desc, path, image }) {
   const url = site.siteUrl ? abs(path) : '';
   const img = site.siteUrl ? abs(image) : '';
+  const root = path.startsWith('/work/') ? '../../' : './';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -44,21 +46,21 @@ ${img ? `<meta property="og:image" content="${img}">` : ''}
 ${img ? `<meta name="twitter:image" content="${img}">` : ''}
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2318181b'/%3E%3Ctext x='32' y='42' font-family='Helvetica,Arial,sans-serif' font-weight='700' font-size='26' text-anchor='middle' fill='%23fafafa'%3ESP%3C/text%3E%3C/svg%3E">
 ${fonts}
-<link rel="stylesheet" href="${cssHref}">
+<link rel="stylesheet" href="${cssHref(root)}">
 <script>${themeInit}</script>
 </head>`;
 }
 
-const header = (home) => `<a class="skip" href="#main">Skip to content</a>
+const header = (home, root = home ? './' : '../../') => `<a class="skip" href="#main">Skip to content</a>
 <header class="nav" id="top">
   <div class="wrap nav-in">
-    <a class="logo" href="/" aria-label="${esc(site.name)}, home">${esc(site.name)}</a>
+    <a class="logo" href="${root}" aria-label="${esc(site.name)}, home">${esc(site.name)}</a>
     <div class="nav-end">
       <nav class="nav-links" id="menu" aria-label="Main">
-        <a href="${home ? '' : '/'}#work">Projects</a>
-        <a href="${home ? '' : '/'}#about">About</a>
-        <a href="${home ? '' : '/'}#experience">Experience</a>
-        <a href="${home ? '' : '/'}#contact">Contact</a>
+        <a href="${home ? '' : root}#work">Projects</a>
+        <a href="${home ? '' : root}#about">About</a>
+        <a href="${home ? '' : root}#experience">Experience</a>
+        <a href="${home ? '' : root}#contact">Contact</a>
         <a class="btn btn-small nav-cta" href="${mail}">Let’s talk</a>
       </nav>
       <button class="theme-toggle" type="button" aria-label="Dark mode" aria-pressed="false">${moon}${sun}</button>
@@ -87,14 +89,14 @@ const socials = () => [
   site.youtube && ['YouTube', site.youtube],
 ].filter(Boolean);
 
-const footer = () => `<footer class="foot" id="contact">
+const footer = (root = './') => `<footer class="foot" id="contact">
   <div class="wrap">
     <div class="cta-panel reveal">
       <h2>Have a product to design? Let’s talk.</h2>
       <p>The quickest way to reach me is email.</p>
       <div class="cta-row">
         <a class="btn btn-light" href="${mail}">${icons.Email}${esc(site.email)}</a>
-        <a class="btn btn-outline-light" href="${site.cv}" download>${download}Download CV</a>
+        <a class="btn btn-outline-light" href="${localAsset(site.cv, root)}" download>${download}Download CV</a>
       </div>
     </div>
     <div class="foot-grid">
@@ -108,11 +110,13 @@ const footer = () => `<footer class="foot" id="contact">
     <p class="fine">© ${new Date().getFullYear()} ${esc(site.name)}</p>
   </div>
 </footer>
-<script src="${jsHref}" defer></script>`;
+<script src="${jsHref(root)}" defer></script>`;
 
-const pic = (src, alt, w, h, { eager = false, cls = '' } = {}) => {
+const pic = (src, alt, w, h, { eager = false, cls = '', root = './' } = {}) => {
+  const webp = localAsset(src, root);
   const jpg = src.replace(/\.webp$/, '.jpg');
-  return `<picture><source srcset="${src}" type="image/webp"><img${cls ? ` class="${cls}"` : ''} src="${jpg}" alt="${esc(alt)}" width="${w}" height="${h}" ${eager ? 'fetchpriority="high"' : 'loading="lazy" decoding="async"'}></picture>`;
+  const fallback = existsSync(jpg.replace(/^\//, '')) ? localAsset(jpg, root) : webp;
+  return `<picture><source srcset="${webp}" type="image/webp"><img${cls ? ` class="${cls}"` : ''} src="${fallback}" alt="${esc(alt)}" width="${w}" height="${h}" ${eager ? 'fetchpriority="high"' : 'loading="lazy" decoding="async"'}></picture>`;
 };
 
 const sectionHead = (id, title, sub = '') => `<div class="section-head center reveal"><h2 id="${id}">${esc(title)}</h2>${sub ? `<p>${esc(sub)}</p>` : ''}</div>`;
@@ -137,7 +141,7 @@ function companyRow() {
   const item = (c, copy) => {
     const hasLogo = c.logo && existsSync(`assets/logos/${c.logo}`);
     const inner = hasLogo
-      ? `<img class="logo-img" src="/assets/logos/${esc(c.logo)}" alt="${copy ? '' : `${esc(c.name)} logo`}" height="32" loading="lazy" decoding="async" data-name="${esc(c.name)}">`
+      ? `<img class="logo-img" src="./assets/logos/${esc(c.logo)}" alt="${copy ? '' : `${esc(c.name)} logo`}" height="32" loading="lazy" decoding="async" data-name="${esc(c.name)}">`
       : `<span class="logo-text">${esc(c.name)}</span>`;
     const link = c.url
       ? `<a href="${esc(c.url)}" target="_blank" rel="noopener noreferrer"${copy ? ' tabindex="-1"' : ` aria-label="${esc(c.name)} (opens in a new tab)"`}>${inner}</a>`
@@ -155,7 +159,7 @@ function companyRow() {
 
 // ---------- Home ----------
 function card(p, i) {
-  return `<a class="card reveal${i === 0 ? ' card-feature' : ''}" href="/work/${p.slug}/">
+  return `<a class="card reveal${i === 0 ? ' card-feature' : ''}" href="./work/${p.slug}/">
   <div class="card-media">${pic(`/assets/covers/${p.slug}.webp`, `${p.title} interface mockups`, 1600, 1000)}</div>
   <div class="card-body">
     <p class="card-meta">${esc(p.type)}</p>
@@ -182,7 +186,7 @@ ${header(true)}
     <p class="lead">${intro()}</p>
     <div class="cta-row">
       <a class="btn" href="#work">Explore my work${arrowRight}</a>
-      <a class="btn btn-ghost" href="${site.cv}" download>${download}Download CV</a>
+      <a class="btn btn-ghost" href="${localAsset(site.cv, './')}" download>${download}Download CV</a>
     </div>
   </div>
 </section>
@@ -232,11 +236,11 @@ ${footer()}
 function shots(p) {
   const dir = `/assets/img/${p.folder}/`;
   if (p.kind === 'mobile') {
-    return `<ul class="phones">${p.shots.map(([f, cap]) => `<li class="reveal"><figure><div class="phone">${pic(dir + f, `${p.title}: ${cap}`, 390, 844)}</div><figcaption>${esc(cap)}</figcaption></figure></li>`).join('')}</ul>`;
+    return `<ul class="phones">${p.shots.map(([f, cap]) => `<li class="reveal"><figure><div class="phone">${pic(dir + f, `${p.title}: ${cap}`, 390, 844, { root: '../../' })}</div><figcaption>${esc(cap)}</figcaption></figure></li>`).join('')}</ul>`;
   }
   return `<div class="browsers">${p.shots.map(([f, cap, o = {}]) => `<figure class="reveal ${o.tall ? 'browser-tall' : 'browser-wide'}">
   <div class="browser"><div class="browser-bar" aria-hidden="true"><i></i><i></i><i></i></div>
-  <div class="browser-view" ${o.tall ? 'tabindex="0" role="region" aria-label="' + esc(p.title + ': ' + cap) + '"' : ''}>${pic(dir + f, `${p.title}: ${cap}`, 1440, 900)}</div></div>
+  <div class="browser-view" ${o.tall ? 'tabindex="0" role="region" aria-label="' + esc(p.title + ': ' + cap) + '"' : ''}>${pic(dir + f, `${p.title}: ${cap}`, 1440, 900, { root: '../../' })}</div></div>
   <figcaption>${esc(cap)}</figcaption></figure>`).join('')}</div>`;
 }
 
@@ -249,7 +253,7 @@ ${header(false)}
 <main id="main">
 <section class="p-hero">
   <div class="wrap">
-    <a class="back" href="/#work">${arrowLeft}All projects</a>
+    <a class="back" href="../../#work">${arrowLeft}All projects</a>
     <h1>${esc(p.title)}</h1>
     <p class="lead">${esc(p.summary)}</p>
     <dl class="facts">
@@ -260,7 +264,7 @@ ${header(false)}
     </dl>
   </div>
 </section>
-<div class="wrap cover">${pic(`/assets/covers/${p.slug}.webp`, `${p.title} interface mockups`, 1600, 1000, { eager: true })}</div>
+<div class="wrap cover">${pic(`/assets/covers/${p.slug}.webp`, `${p.title} interface mockups`, 1600, 1000, { eager: true, root: '../../' })}</div>
 <section class="section">
   <div class="wrap split">
     <h2>Overview</h2>
@@ -275,12 +279,12 @@ ${header(false)}
 </section>
 <section class="section section-tight">
   <div class="wrap pn">
-    <a href="/work/${prev.slug}/"><span class="muted">${arrowLeft}Previous</span><strong>${esc(prev.title)}</strong></a>
-    <a href="/work/${next.slug}/" class="pn-next"><span class="muted">Next${arrowRight}</span><strong>${esc(next.title)}</strong></a>
+    <a href="../${prev.slug}/"><span class="muted">${arrowLeft}Previous</span><strong>${esc(prev.title)}</strong></a>
+    <a href="../${next.slug}/" class="pn-next"><span class="muted">Next${arrowRight}</span><strong>${esc(next.title)}</strong></a>
   </div>
 </section>
 </main>
-${footer()}
+${footer('../../')}
 </body></html>`;
 }
 
@@ -290,7 +294,7 @@ projects.forEach((p, i) => {
   writeFileSync(`work/${p.slug}/index.html`, projectPage(p, i));
 });
 writeFileSync('404.html', `${head({ title: `Page not found | ${site.name}`, desc: 'This page does not exist.', path: '/404.html', image: '' })}
-<body>${header(false)}<main id="main" class="wrap nf"><h1>That page doesn’t exist.</h1><p class="lead">Try the <a href="/">home page</a> or the <a href="/#work">projects</a>.</p></main>${footer()}</body></html>`);
+<body>${header(false, './')}<main id="main" class="wrap nf"><h1>That page doesn’t exist.</h1><p class="lead">Try the <a href="./">home page</a> or the <a href="./#work">projects</a>.</p></main>${footer()}</body></html>`);
 if (site.siteUrl) {
   const urls = ['/', ...projects.map((p) => `/work/${p.slug}/`)].map((u) => `<url><loc>${abs(u)}</loc></url>`).join('');
   writeFileSync('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`);
